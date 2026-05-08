@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Global Stock Screener</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ── Reset & Variables ─────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #090e1a;
+    --surface:     #0d1526;
+    --surface2:    #111d35;
+    --border:      #1e2d4a;
+    --border2:     #243556;
+    --text:        #c8d8f0;
+    --text-muted:  #4a6080;
+    --text-dim:    #2a3f60;
+    --gold:        #f0b942;
+    --gold-dim:    #7a5a18;
+    --green:       #2ecc8a;
+    --green-dim:   #0d3d26;
+    --red:         #f05252;
+    --red-dim:     #3d0f0f;
+    --amber:       #f0952a;
+    --amber-dim:   #3d2208;
+    --blue:        #4a9eff;
+    --blue-dim:    #0d2040;
+    --mono:        'Space Mono', monospace;
+    --sans:        'DM Sans', sans-serif;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Grid noise texture ────────────────────── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(74,158,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(74,158,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  /* ── Layout ────────────────────────────────── */
+  .shell {
+    position: relative; z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* ── Header ────────────────────────────────── */
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .header-tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--blue);
+    text-transform: uppercase;
+    border: 1px solid var(--blue-dim);
+    padding: 4px 12px;
+    border-radius: 2px;
+    margin-bottom: 18px;
+  }
+  .header h1 {
+    font-family: var(--mono);
+    font-size: clamp(22px, 4vw, 36px);
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -1px;
+    line-height: 1.1;
+  }
+  .header h1 span { color: var(--gold); }
+  .header p {
+    margin-top: 12px;
+    color: var(--text-muted);
+    font-size: 14px;
+    font-weight: 300;
+  }
+
+  /* ── Search bar ────────────────────────────── */
+  .search-wrap {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 40px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 6px 6px 20px;
+    transition: border-color .2s;
+  }
+  .search-wrap:focus-within { border-color: var(--blue); }
+
+  .search-wrap input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    font-family: var(--mono);
+    font-size: 18px;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+  .search-wrap input::placeholder { color: var(--text-dim); letter-spacing: 1px; font-size: 14px; }
+
+  .btn-screen {
+    background: var(--gold);
+    color: #0a0800;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 4px;
+    padding: 14px 28px;
+    cursor: pointer;
+    transition: opacity .15s, transform .1s;
+    white-space: nowrap;
+  }
+  .btn-screen:hover  { opacity: .85; }
+  .btn-screen:active { transform: scale(.98); }
+  .btn-screen:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── Loader ────────────────────────────────── */
+  .loader {
+    display: none;
+    text-align: center;
+    padding: 60px 0;
+  }
+  .loader.active { display: block; }
+  .loader-ring {
+    width: 48px; height: 48px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    margin: 0 auto 16px;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loader p { font-family: var(--mono); font-size: 11px; color: var(--text-muted); letter-spacing: 2px; }
+
+  /* ── Error ─────────────────────────────────── */
+  .error-box {
+    display: none;
+    background: var(--red-dim);
+    border: 1px solid var(--red);
+    border-radius: 6px;
+    padding: 18px 22px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--red);
+  }
+  .error-box.active { display: block; }
+
+  /* ── Results ───────────────────────────────── */
+  #results { display: none; }
+  #results.active { display: block; animation: fadeUp .4s ease; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Stock header card ──────────────────────── */
+  .stock-header {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 28px 32px;
+    margin-bottom: 24px;
+    display: flex;
+    gap: 32px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .stock-meta { flex: 1; min-width: 200px; }
+  .stock-ticker {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--gold);
+    letter-spacing: 2px;
+  }
+  .stock-name {
+    font-size: 15px;
+    color: #fff;
+    margin: 4px 0 10px;
+    font-weight: 500;
+  }
+  .stock-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    border: 1px solid var(--border2);
+    padding: 3px 8px;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+
+  /* ── Score ring ─────────────────────────────── */
+  .score-ring-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .score-ring {
+    position: relative;
+    width: 100px; height: 100px;
+  }
+  .score-ring svg { transform: rotate(-90deg); }
+  .score-ring circle { fill: none; stroke-width: 6; }
+  .ring-bg    { stroke: var(--border2); }
+  .ring-fill  {
+    stroke: var(--gold);
+    stroke-linecap: round;
+    stroke-dasharray: 283;
+    stroke-dashoffset: 283;
+    transition: stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1);
+  }
+  .ring-fill.green  { stroke: var(--green); }
+  .ring-fill.amber  { stroke: var(--amber); }
+  .ring-fill.orange { stroke: #f07a28; }
+  .ring-fill.red    { stroke: var(--red); }
+
+  .ring-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+  }
+  .ring-score { font-size: 22px; font-weight: 700; color: #fff; line-height: 1; }
+  .ring-label { font-size: 9px; color: var(--text-muted); margin-top: 2px; letter-spacing: 1px; }
+
+  .verdict-text {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-align: center;
+    max-width: 110px;
+  }
+  .verdict-text.green  { color: var(--green); }
+  .verdict-text.amber  { color: var(--amber); }
+  .verdict-text.orange { color: #f07a28; }
+  .verdict-text.red    { color: var(--red); }
+
+  /* ── Criteria grid ───────────────────────────── */
+  .section-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .criteria-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 600px) { .criteria-grid { grid-template-columns: 1fr; } }
+
+  .criterion {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 18px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity .3s ease, transform .3s ease;
+    cursor: default;
+    position: relative;
+    overflow: hidden;
+  }
+  .criterion.visible { opacity: 1; transform: translateY(0); }
+  .criterion.pass { border-left-color: var(--green); }
+  .criterion.fail { border-left-color: var(--red); }
+  .criterion.pass::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(46,204,138,.04) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .crit-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .crit-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.3;
+  }
+  .crit-badge {
+    flex-shrink: 0;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 3px 8px;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+  .badge-pass { background: var(--green-dim); color: var(--green); }
+  .badge-fail { background: var(--red-dim);   color: var(--red);   }
+
+  .crit-value {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .crit-value.pass { color: var(--green); }
+  .crit-value.fail { color: var(--red);   }
+
+  .crit-threshold {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .crit-note {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+    line-height: 1.4;
+  }
+  .crit-category {
+    position: absolute;
+    top: 14px; right: 56px;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* ── Summary bar ─────────────────────────────── */
+  .summary-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px 28px;
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .summary-stat { flex: 1; min-width: 120px; }
+  .summary-stat .label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .summary-stat .value {
+    font-family: var(--mono);
+    font-size: 24px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .summary-stat .value.green  { color: var(--green); }
+  .summary-stat .value.amber  { color: var(--amber); }
+  .summary-stat .value.orange { color: #f07a28; }
+  .summary-stat .value.red    { color: var(--red); }
+  .summary-stat .sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .divider { width: 1px; background: var(--border); align-self: stretch; flex-shrink: 0; }
+  @media (max-width: 500px) { .divider { display: none; } }
+
+  /* ── UK note ─────────────────────────────────── */
+  .uk-note {
+    margin-top: 20px;
+    background: var(--blue-dim);
+    border: 1px solid rgba(74,158,255,.15);
+    border-radius: 6px;
+    padding: 14px 18px;
+    font-size: 12px;
+    color: rgba(74,158,255,.8);
+    line-height: 1.6;
+  }
+  .uk-note strong { color: var(--blue); }
+
+  /* ── Examples ────────────────────────────────── */
+  .examples {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+    justify-content: center;
+  }
+  .ex-chip {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    border: 1px solid var(--border2);
+    padding: 5px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .ex-chip:hover { color: var(--gold); border-color: var(--gold-dim); }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-tag">UK GBP · Global Equities</div>
+    <h1>STOCK <span>SCREENER</span></h1>
+    <p>Enter any ticker. Assessed against 10 investment criteria. Make your call.</p>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="search-wrap">
+    <input id="tickerInput" type="text" placeholder="Enter ticker  e.g. AAPL · ULVR.L · ASML.AS · NVO"
+           autocomplete="off" spellcheck="false" maxlength="12" />
+    <button class="btn-screen" id="screenBtn" onclick="runScreen()">SCREEN →</button>
+  </div>
+
+  <!-- EXAMPLE TICKERS -->
+  <div class="examples">
+    <span class="ex-chip" onclick="quickLoad('MSFT')">MSFT</span>
+    <span class="ex-chip" onclick="quickLoad('AAPL')">AAPL</span>
+    <span class="ex-chip" onclick="quickLoad('ULVR.L')">ULVR.L</span>
+    <span class="ex-chip" onclick="quickLoad('ASML.AS')">ASML.AS</span>
+    <span class="ex-chip" onclick="quickLoad('NVO')">NVO</span>
+    <span class="ex-chip" onclick="quickLoad('V')">V</span>
+    <span class="ex-chip" onclick="quickLoad('NOVO-B.CO')">NOVO-B.CO</span>
+  </div>
+
+  <!-- LOADER -->
+  <div class="loader" id="loader">
+    <div class="loader-ring"></div>
+    <p>ANALYSING STOCK…</p>
+  </div>
+
+  <!-- ERROR -->
+  <div class="error-box" id="errorBox"></div>
+
+  <!-- RESULTS -->
+  <div id="results">
+
+    <!-- Stock identity -->
+    <div class="stock-header" id="stockHeader"></div>
+
+    <!-- Criteria grid -->
+    <div class="section-label">10 SCREENING CRITERIA</div>
+    <div class="criteria-grid" id="criteriaGrid"></div>
+
+    <!-- Summary -->
+    <div class="summary-bar" id="summaryBar"></div>
+
+    <!-- UK Note -->
+    <div class="uk-note" id="ukNote"></div>
+
+  </div>
+
+</div>
+
+<script>
+  const input  = document.getElementById('tickerInput');
+  const btn    = document.getElementById('screenBtn');
+  const loader = document.getElementById('loader');
+  const errBox = document.getElementById('errorBox');
+  const results= document.getElementById('results');
+
+  // Enter key
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') runScreen(); });
+
+  function quickLoad(ticker) {
+    input.value = ticker;
+    runScreen();
+  }
+
+  function setLoading(on) {
+    btn.disabled = on;
+    btn.textContent = on ? '...' : 'SCREEN →';
+    loader.classList.toggle('active', on);
+    errBox.classList.remove('active');
+    results.classList.remove('active');
+  }
+
+  async function runScreen() {
+    const ticker = input.value.trim().toUpperCase();
+    if (!ticker) { input.focus(); return; }
+
+    setLoading(true);
+    try {
+      const resp = await fetch(`/api/screen?ticker=${encodeURIComponent(ticker)}`);
+      const data = await resp.json();
+      if (!resp.ok || data.error) throw new Error(data.error || 'Unknown error');
+      renderResults(data);
+    } catch(err) {
+      errBox.textContent = `⚠  ${err.message}`;
+      errBox.classList.add('active');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function renderResults(d) {
+    // ── Stock header ──────────────────────
+    const priceStr = d.price ? `${d.currency} ${Number(d.price).toLocaleString('en-GB', {minimumFractionDigits:2, maximumFractionDigits:2})}` : '—';
+    const ringColor = d.verdict_color;
+    const offset    = 283 - (283 * d.score_pct / 100);
+
+    document.getElementById('stockHeader').innerHTML = `
+      <div class="stock-meta">
+        <div class="stock-ticker">${d.ticker}</div>
+        <div class="stock-name">${d.name}</div>
+        <div class="stock-tags">
+          <span class="tag">${d.sector}</span>
+          <span class="tag">${d.country}</span>
+          <span class="tag">${d.exchange}</span>
+          <span class="tag">Price: ${priceStr}</span>
+        </div>
+      </div>
+      <div class="score-ring-wrap">
+        <div class="score-ring">
+          <svg viewBox="0 0 100 100" width="100" height="100">
+            <circle class="ring-bg"   cx="50" cy="50" r="45"/>
+            <circle class="ring-fill ${ringColor}" cx="50" cy="50" r="45"
+                    id="ringFill"
+                    style="stroke-dashoffset: 283"/>
+          </svg>
+          <div class="ring-text">
+            <div class="ring-score">${d.passed}/${d.total}</div>
+            <div class="ring-label">CRITERIA</div>
+          </div>
+        </div>
+        <div class="verdict-text ${ringColor}">${d.verdict}</div>
+      </div>
+    `;
+
+    // Animate ring
+    setTimeout(() => {
+      const fill = document.getElementById('ringFill');
+      if (fill) fill.style.strokeDashoffset = offset;
+    }, 100);
+
+    // ── Criteria cards ────────────────────
+    const grid = document.getElementById('criteriaGrid');
+    grid.innerHTML = '';
+    d.criteria.forEach((c, i) => {
+      const card = document.createElement('div');
+      card.className = `criterion ${c.passed ? 'pass' : 'fail'}`;
+      card.innerHTML = `
+        <div class="crit-top">
+          <div class="crit-name">${i + 1}. ${c.name}</div>
+          <span class="crit-badge ${c.passed ? 'badge-pass' : 'badge-fail'}">${c.passed ? '✓ PASS' : '✗ FAIL'}</span>
+        </div>
+        <div class="crit-value ${c.passed ? 'pass' : 'fail'}">${c.value}</div>
+        <div class="crit-threshold">Threshold: ${c.threshold}</div>
+        ${c.note ? `<div class="crit-note">${c.note}</div>` : ''}
+        <div class="crit-category">${c.category}</div>
+      `;
+      grid.appendChild(card);
+      // staggered reveal
+      setTimeout(() => card.classList.add('visible'), 60 + i * 60);
+    });
+
+    // ── Summary bar ───────────────────────
+    const failed = d.total - d.passed;
+    const cl = d.verdict_color;
+
+    const catGroups = {};
+    d.criteria.forEach(c => {
+      if (!catGroups[c.category]) catGroups[c.category] = { pass: 0, total: 0 };
+      catGroups[c.category].total++;
+      if (c.passed) catGroups[c.category].pass++;
+    });
+    const catHtml = Object.entries(catGroups).map(([cat, g]) =>
+      `<div class="summary-stat">
+        <div class="label">${cat}</div>
+        <div class="value" style="font-size:18px">${g.pass}/${g.total}</div>
+      </div>`
+    ).join('<div class="divider"></div>');
+
+    document.getElementById('summaryBar').innerHTML = `
+      <div class="summary-stat">
+        <div class="label">Criteria Passed</div>
+        <div class="value ${cl}">${d.passed} / ${d.total}</div>
+        <div class="sub">${d.score_pct}% pass rate</div>
+      </div>
+      <div class="divider"></div>
+      <div class="summary-stat">
+        <div class="label">Verdict</div>
+        <div class="value ${cl}" style="font-size:14px;line-height:1.3">${d.verdict}</div>
+      </div>
+      <div class="divider"></div>
+      ${catHtml}
+    `;
+
+    // ── UK note ───────────────────────────
+    let ukNote = `<strong>🇬🇧 UK Investor Notes</strong><br>`;
+    if (d.country === 'United Kingdom') {
+      ukNote += `<b>Stamp Duty:</b> 0.5% applies on UK share purchases · ISA eligible (verify with your broker) · No withholding tax on UK dividends.`;
+    } else if (d.country === 'United States') {
+      ukNote += `<b>Withholding Tax:</b> Submit <b>W-8BEN</b> form to your broker to reduce US dividend WHT from 30% → 15% (UK-US tax treaty) · ISA eligible · No stamp duty.`;
+    } else {
+      ukNote += `Check UK double-taxation treaty with <b>${d.country}</b> for dividend withholding tax rate · ISA eligibility — confirm with your broker · No UK stamp duty on overseas stocks.`;
+    }
+    ukNote += ` Consider holding in your <b>Trading 212 Stocks & Shares ISA</b> (£20k/yr) to shelter gains from CGT (now only £3k annual exempt amount outside ISA).`;
+    document.getElementById('ukNote').innerHTML = ukNote;
+
+    results.classList.add('active');
+    results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+</script>
+</body>
+</html>
