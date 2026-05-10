@@ -17,6 +17,7 @@ import pandas as pd
 import requests as req_lib
 import logging
 import traceback
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
