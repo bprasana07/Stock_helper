@@ -897,8 +897,21 @@ HTML = (
 # MAIN
 # ─────────────────────────────────────────────
 
+import os
+
 if __name__ == "__main__":
-    print("\n  GLOBAL STOCK SCREENER -- Starting...")
-    print("  Open browser at:  http://localhost:5000")
-    print("  Type any company name or ticker symbol\n")
-   app.run(debug=True, host="0.0.0.0", port=5000)
+
+    port = int(os.environ.get("PORT", 5000))
+
+    print(f"""
+╔════════════════════════════════════════════╗
+║   GLOBAL STOCK SCREENER  --  Starting  ... ║
+║   Running on port: {port:<24}              ║
+╚════════════════════════════════════════════╝
+""", flush=True)
+
+    app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=False
+    )
